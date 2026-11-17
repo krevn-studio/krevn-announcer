@@ -1,0 +1,29 @@
+name: App Store snapshot
+on:
+  schedule:
+    - cron: '7 7 * * *' # 07:07 UTC, prima del controllo Devvit delle 08:17
+  workflow_dispatch:
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Leggi App Store e scrivi su Slack
+        env:
+          SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
+          SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
+          # Stessi id di APPS in src/server/krevn.ts
+          APP_IDS: '6780602824 6769732967 6826930326'
+        run: |
+          set -euo pipefail
+          snap='{}'
+          for id in $APP_IDS; do
+            r=$(curl -fsS "https://itunes.apple.com/lookup?id=$id&country=it" \
+              | jq -c '(.results[0] // null) | if . then {version, releaseNotes, trackViewUrl, trackName} else null end')
+            snap=$(jq -c --arg id "$id" --argjson r "$r" '. + {($id): $r}' <<<"$snap")
+          done
+          b64=$(printf '%s' "$snap" | base64 -w0)
+          curl -fsS -X POST https://slack.com/api/chat.postMessage \
+            -H "Authorization: Bearer $SLACK_TOKEN" \
+            -H 'Content-Type: application/json; charset=utf-8' \
+            -d "$(jq -nc --arg c "$SLACK_CHANNEL" --arg t "krevn-snapshot $b64" '{channel: $c, text: $t}')" \
+            | jq -e '.ok' >/dev/null

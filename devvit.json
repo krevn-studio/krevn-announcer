@@ -1,0 +1,64 @@
+{
+  "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
+  "name": "krevn-announcer",
+  "post": {
+    "entrypoints": {
+      "default": {
+        "entry": "splash.html"
+      },
+      "game": {
+        "entry": "game.html"
+      }
+    }
+  },
+  "server": {},
+  "permissions": {
+    "http": {
+      "enable": true,
+      "domains": [
+        "slack.com"
+      ]
+    }
+  },
+  "scheduler": {
+    "tasks": {
+      "krevn-check": {
+        "endpoint": "/internal/scheduler/krevn-check",
+        "cron": "17 8 * * *"
+      }
+    }
+  },
+  "menu": {
+    "items": [
+      {
+        "label": "Krevn: controlla ora",
+        "description": "Controlla App Store e pubblica lanci o aggiornamenti importanti.",
+        "location": "subreddit",
+        "forUserType": "moderator",
+        "endpoint": "/internal/on/menu/check-now"
+      }
+    ]
+  },
+  "triggers": {
+    "onAppInstall": "/internal/on/app/install"
+  },
+  "scripts": {
+    "dev": "npm run watch"
+  },
+  "settings": {
+    "global": {
+      "slackToken": {
+        "type": "string",
+        "label": "Slack bot token",
+        "defaultValue": "",
+        "isSecret": true
+      },
+      "slackChannel": {
+        "type": "string",
+        "label": "Slack channel ID",
+        "defaultValue": "",
+        "isSecret": true
+      }
+    }
+  }
+}
