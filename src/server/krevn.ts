@@ -20,6 +20,9 @@ type SlackMsg = { text?: string; ts: string };
 const SNAP = "krevn-snapshot "; // scritto dal workflow GitHub
 const CTL = "krevn-control "; // scritto dal worker di /announcer: "pause" o "resume"
 const STATUS = "krevn-status "; // scritto da qui dopo ogni controllo
+// Canali leggibili dalle persone (creati da slack-setup.mjs): #reddit per i post, #agent-announcer per gli errori.
+const NOTIFY_CHANNEL = "C0CJJNU2TJ8";
+const ALERT_CHANNEL = "C0CJGUBG8QH";
 
 export const decodeB64 = <T>(text: string, prefix: string): T =>
   JSON.parse(Buffer.from(text.slice(prefix.length), "base64").toString("utf8"));
@@ -145,16 +148,21 @@ export async function runCheck(): Promise<string[]> {
       const lastApp = Number((await redis.get(`krevn:last:${app.id}`)) || 0);
       if (recent.length >= WEEK_MAX || now - lastApp < PER_APP_GAP) { log.push(`${app.name} ${info.version}: rimandato (limite post)`); continue; }
 
-      const post = await reddit.submitPost({ subredditName, ...buildPost(app.name, info, launch) });
+      const content = buildPost(app.name, info, launch);
+      const post = await reddit.submitPost({ subredditName, ...content });
       await redis.set(key, info.version);
       await redis.set(`krevn:last:${app.id}`, String(now));
       recent.push(now);
       log.push(`${app.name} ${info.version}: pubblicato ${post.url ?? post.id}`);
+      await slack("chat.postMessage", { body: { channel: NOTIFY_CHANNEL, unfurl_links: false, text: `📣 Pubblicato su r/${subredditName}: *${content.title}*\n${post.url ?? post.id}` } })
+        .catch((e) => console.error(e)); // il post su Reddit è già uscito: non farlo fallire per Slack
     }
     await redis.set("krevn:posts", JSON.stringify(recent));
     return log;
   } catch (err) {
-    log.push(`errore: ${err instanceof Error ? err.message : String(err)}`);
+    const msg = err instanceof Error ? err.message : String(err);
+    log.push(`errore: ${msg}`);
+    await slack("chat.postMessage", { body: { channel: ALERT_CHANNEL, text: `⚠️ Announcer: controllo fallito.\n\`${msg}\`` } }).catch((e) => console.error(e));
     throw err;
   } finally {
     // Stato per /announcer status; se fallisce anche questo, l'errore originale resta quello mostrato.
