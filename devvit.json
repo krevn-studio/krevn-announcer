@@ -36,6 +36,13 @@
         "location": "subreddit",
         "forUserType": "moderator",
         "endpoint": "/internal/on/menu/check-now"
+      },
+      {
+        "label": "Krevn: reset stato",
+        "description": "Azzera versioni viste e limiti post dell'announcer.",
+        "location": "subreddit",
+        "forUserType": "moderator",
+        "endpoint": "/internal/on/menu/reset"
       }
     ]
   },

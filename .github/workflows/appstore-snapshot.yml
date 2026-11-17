@@ -18,7 +18,7 @@ jobs:
           snap='{}'
           for id in $APP_IDS; do
             r=$(curl -fsS "https://itunes.apple.com/lookup?id=$id&country=it" \
-              | jq -c '(.results[0] // null) | if . then {version, releaseNotes, trackViewUrl, trackName} else null end')
+              | jq -c '(.results[0] // null) | if . then {version, releaseNotes, trackViewUrl, trackName, description, formattedPrice, primaryGenreName} else null end')
             snap=$(jq -c --arg id "$id" --argjson r "$r" '. + {($id): $r}' <<<"$snap")
           done
           b64=$(printf '%s' "$snap" | base64 -w0)

@@ -10,7 +10,10 @@ const DAY = 86_400_000;
 const PER_APP_GAP = 14 * DAY; // max 1 post per app ogni 14 giorni
 const WEEK_MAX = 2; // max 2 post a settimana nel subreddit
 
-type Lookup = { version: string; releaseNotes?: string; trackViewUrl: string; trackName: string };
+type Lookup = {
+  version: string; releaseNotes?: string; trackViewUrl: string; trackName: string;
+  description?: string; formattedPrice?: string; primaryGenreName?: string;
+};
 type SlackMsg = { text?: string; ts: string };
 
 // Messaggi nel canale bus di Slack. Il payload è JSON in base64, così Slack non altera &, <, >.
@@ -52,18 +55,41 @@ export function latestControl(messages: SlackMsg[], lastTs: string): { cmd: "pau
 // "2.1.3" -> "2.1": cambia solo con major o minor, le patch non fanno post
 export const majorMinor = (v: string) => { const [a, b] = v.split("."); return `${Number(a) || 0}.${Number(b) || 0}`; };
 
+// Primi paragrafi della descrizione App Store, tagliati a fine paragrafo (circa 400-900 caratteri).
+export function excerpt(text = "", min = 400, max = 900) {
+  const out: string[] = [];
+  for (const p of text.split(/\n\s*\n/).map((x) => x.trim()).filter(Boolean)) {
+    if (out.join("\n\n").length >= min || out.join("\n\n").length + p.length > max) break;
+    out.push(p);
+  }
+  return out.join("\n\n") || text.slice(0, max).trim();
+}
+
 export function buildPost(name: string, info: Lookup, launch: boolean) {
+  const url = info.trackViewUrl.split("?")[0];
   const notes = (info.releaseNotes || "").trim();
-  const title = launch
-    ? `${name} è disponibile su App Store / ${name} is now on the App Store`
-    : `${name} ${info.version}: novità / what's new`;
+  const desc = excerpt(info.description);
+  const meta = [info.formattedPrice && `**Prezzo:** ${info.formattedPrice}`, info.primaryGenreName && `**Categoria:** ${info.primaryGenreName}`]
+    .filter(Boolean).join(" · ");
+  const title = launch ? `${info.trackName || name} è disponibile su App Store` : `${name} ${info.version}: le novità`;
   const text = [
-    launch ? `**${name}** è uscita su App Store. / **${name}** is out on the App Store.` : `**${name} ${info.version}** è disponibile. / **${name} ${info.version}** is available.`,
-    notes ? `Note di rilascio / Release notes:\n\n${notes}` : "",
-    `[App Store](${info.trackViewUrl})`,
-    "Feedback e domande nei commenti. / Feedback and questions in the comments.",
+    launch ? `**${name}** è appena uscita su App Store.` : `**${name} ${info.version}** è disponibile su App Store.`,
+    launch && desc ? desc : "",
+    notes ? `**Novità**\n\n${notes}` : "",
+    meta,
+    `**[Scarica ${name} su App Store](${url})**`,
+    "Domande, idee o bug? Scrivili nei commenti, leggiamo tutto.",
+    "---",
+    launch ? `*EN: ${name} is now available on the App Store. Feedback welcome in the comments.*` : `*EN: ${name} ${info.version} is out. Feedback welcome in the comments.*`,
   ].filter(Boolean).join("\n\n");
   return { title: title.slice(0, 300), text };
+}
+
+// Cancella versioni viste e limiti post (non la pausa): al giro dopo le app con launchOnFirstRun ripubblicano il lancio.
+export async function resetState() {
+  const keys = ["krevn:posts", ...APPS.flatMap((a) => [`krevn:v:${a.id}`, `krevn:last:${a.id}`])];
+  await redis.del(...keys);
+  return keys.length;
 }
 
 export async function runCheck(): Promise<string[]> {

@@ -1,5 +1,5 @@
 import type {IncomingMessage, ServerResponse} from 'node:http'
-import {runCheck} from './krevn.ts'
+import {resetState, runCheck} from './krevn.ts'
 
 // Solo due rotte: il controllo giornaliero e l'installazione (che non crea post).
 export async function onReq(reqMsg: IncomingMessage, rspMsg: ServerResponse): Promise<void> {
@@ -15,6 +15,10 @@ export async function onReq(reqMsg: IncomingMessage, rspMsg: ServerResponse): Pr
       try { text = (await runCheck()).join(' · ') || 'Nessuna novità' }
       catch (err) { console.error(err); text = 'Errore: ' + (err instanceof Error ? err.message : String(err)) }
       return writeJson(200, {showToast: {text: text.slice(0, 250)}}, rspMsg)
+    }
+    if (reqMsg.method === 'POST' && path === '/internal/on/menu/reset') {
+      await resetState()
+      return writeJson(200, {showToast: {text: 'Stato azzerato. Premi "Krevn: controlla ora" per ripubblicare il lancio.'}}, rspMsg)
     }
     if (reqMsg.method === 'POST' && path === '/internal/on/app/install') {
       return writeJson(200, {}, rspMsg)
