@@ -50,13 +50,11 @@
       "slackToken": {
         "type": "string",
         "label": "Slack bot token",
-        "defaultValue": "",
         "isSecret": true
       },
       "slackChannel": {
         "type": "string",
         "label": "Slack channel ID",
-        "defaultValue": "",
         "isSecret": true
       }
     }
