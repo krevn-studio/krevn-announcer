@@ -44,6 +44,17 @@ async function channelId() {
   return c;
 }
 
+// Messaggi "krevn-snapshot <id> <base64>", uno per app: vale il più recente di ogni app.
+export function readSnapshots(messages: SlackMsg[]): Record<string, Lookup | null> {
+  const snap: Record<string, Lookup | null> = {};
+  for (const m of messages) {
+    const parts = m.text?.startsWith(SNAP) ? m.text.slice(SNAP.length).split(" ") : [];
+    if (parts.length !== 2 || parts[0] in snap) continue; // salta il vecchio formato e i duplicati più vecchi
+    try { snap[parts[0]] = JSON.parse(Buffer.from(parts[1], "base64").toString("utf8")); } catch { /* messaggio rovinato: usa il prossimo */ }
+  }
+  return snap;
+}
+
 // L'ultimo comando pause/resume non ancora applicato diventa lo stato salvato in Redis.
 export function latestControl(messages: SlackMsg[], lastTs: string): { cmd: "pause" | "resume"; ts: string } | null {
   const m = messages.find((x) => x.text?.startsWith(CTL)); // Slack restituisce dal più recente
@@ -110,9 +121,8 @@ export async function runCheck(): Promise<string[]> {
     }
     if (paused) { log.push("in pausa: nessun post"); return log; } // gli aggiornamenti restano in coda fino a resume
 
-    const snapMsg = messages.find((x) => x.text?.startsWith(SNAP));
-    if (!snapMsg?.text) throw new Error("nessuno snapshot App Store su Slack");
-    const snap = decodeB64<Record<string, Lookup | null>>(snapMsg.text, SNAP);
+    const snap = readSnapshots(messages);
+    if (!Object.keys(snap).length) throw new Error("nessuno snapshot App Store su Slack");
 
     const now = Date.now();
     const posts: number[] = JSON.parse((await redis.get("krevn:posts")) || "[]");

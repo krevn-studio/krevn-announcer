@@ -15,15 +15,19 @@ jobs:
           APP_IDS: '6780602824 6769732967 6826930326'
         run: |
           set -euo pipefail
-          snap='{}'
+          # Un messaggio per app: Slack taglia i testi oltre 4000 caratteri.
           for id in $APP_IDS; do
-            r=$(curl -fsS "https://itunes.apple.com/lookup?id=$id&country=it" \
-              | jq -c '(.results[0] // null) | if . then {version, releaseNotes, trackViewUrl, trackName, description, formattedPrice, primaryGenreName} else null end')
-            snap=$(jq -c --arg id "$id" --argjson r "$r" '. + {($id): $r}' <<<"$snap")
+            raw=$(curl -fsS "https://itunes.apple.com/lookup?id=$id&country=it")
+            for n in 900 600 300 0; do
+              r=$(jq -c --argjson n "$n" '(.results[0] // null) | if . then {version, trackViewUrl, trackName, formattedPrice, primaryGenreName,
+                description: ((.description // "")[:$n]), releaseNotes: ((.releaseNotes // "")[:($n * 1.3 | floor)])} else null end' <<<"$raw")
+              b64=$(printf '%s' "$r" | base64 -w0)
+              [ ${#b64} -le 3900 ] && break
+            done
+            [ ${#b64} -le 3900 ] || { echo "snapshot $id troppo lungo"; exit 1; }
+            curl -fsS -X POST https://slack.com/api/chat.postMessage \
+              -H "Authorization: Bearer $SLACK_TOKEN" \
+              -H 'Content-Type: application/json; charset=utf-8' \
+              -d "$(jq -nc --arg c "$SLACK_CHANNEL" --arg t "krevn-snapshot $id $b64" '{channel: $c, text: $t}')" \
+              | jq -e '.ok' >/dev/null
           done
-          b64=$(printf '%s' "$snap" | base64 -w0)
-          curl -fsS -X POST https://slack.com/api/chat.postMessage \
-            -H "Authorization: Bearer $SLACK_TOKEN" \
-            -H 'Content-Type: application/json; charset=utf-8' \
-            -d "$(jq -nc --arg c "$SLACK_CHANNEL" --arg t "krevn-snapshot $b64" '{channel: $c, text: $t}')" \
-            | jq -e '.ok' >/dev/null
